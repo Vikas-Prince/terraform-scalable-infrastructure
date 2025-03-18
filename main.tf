@@ -197,12 +197,87 @@ resource "aws_alb_listener" "alb_listener"{
 }
 
 
+resource "aws_iam_role" "ec2_ssm_role" {
+  name = "EC2-SSM-Role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action    = "sts:AssumeRole"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+        Effect    = "Allow"
+        Sid       = ""
+      },
+    ]
+  })
+}
+
+resource "aws_iam_instance_profile" "ec2_ssm_instance_profile" {
+  name = "EC2-SSM-Instance-Profile"
+  role = aws_iam_role.ec2_ssm_role.name
+}
+
+resource "aws_iam_role_policy_attachment" "ec2_ssm_role_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+  role       = aws_iam_role.ec2_ssm_role.name
+}
+
+resource "aws_vpc_endpoint" "ssm" {
+  vpc_id             = aws_vpc.dev_vpc.id
+  service_name       = "com.amazonaws.ap-south-1.ssm"
+  vpc_endpoint_type  = "Interface"
+  subnet_ids         = [aws_subnet.private_subnet.id]
+  security_group_ids = [aws_security_group.ec2_sg.id]  
+
+  private_dns_enabled = true  # Enable Private DNS for the service
+
+  tags = {
+    Name = "ssm-endpoint"
+  }
+}
+
+resource "aws_vpc_endpoint" "ec2messages" {
+  vpc_id             = aws_vpc.dev_vpc.id
+  service_name       = "com.amazonaws.ap-south-1.ec2messages"
+  vpc_endpoint_type  = "Interface"
+  subnet_ids         = [aws_subnet.private_subnet.id] 
+  security_group_ids = [aws_security_group.ec2_sg.id]  
+
+  private_dns_enabled = true  # Enable Private DNS for the service
+
+  tags = {
+    Name = "ec2messages-endpoint"
+  }
+}
+
+resource "aws_vpc_endpoint" "ssmmessages" {
+  vpc_id             = aws_vpc.dev_vpc.id
+  service_name       = "com.amazonaws.ap-south-1.ssmmessages"
+  vpc_endpoint_type  = "Interface"
+  subnet_ids         = [aws_subnet.private_subnet.id]  
+  security_group_ids = [aws_security_group.ec2_sg.id]  
+
+  private_dns_enabled = true  # Enable Private DNS for the service
+
+  tags = {
+    Name = "ssmmessages-endpoint"
+  }
+}
+
+
+
 resource "aws_launch_template" "auto_scale_conf"{
     name = "ASG-Launch-temlate"
     image_id = var.custom_ami_id
     instance_type = var.instance_type
     vpc_security_group_ids = [aws_security_group.ec2_sg.id]
     
+    iam_instance_profile {
+      arn = aws_iam_instance_profile.ec2_ssm_instance_profile.arn
+    }
     lifecycle {
       create_before_destroy = true
     }
